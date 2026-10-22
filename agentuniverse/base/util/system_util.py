@@ -164,6 +164,17 @@ def process_yaml_func(func_expr: str, yaml_func_instance: Any) -> str:
     return func_expr
 
 
+def _contains_func_expression(value: Any) -> bool:
+    """Check if a value or any nested container contains an @FUNC expression."""
+    if isinstance(value, str):
+        return value.startswith("@FUNC(") and value.endswith(")")
+    if isinstance(value, dict):
+        return any(_contains_func_expression(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_contains_func_expression(item) for item in value)
+    return False
+
+
 def process_dict_with_funcs(input_dict: dict, yaml_func_instance: Any) -> dict:
     """
     Process a dictionary by resolving @FUNC expressions in its values.
@@ -179,7 +190,17 @@ def process_dict_with_funcs(input_dict: dict, yaml_func_instance: Any) -> dict:
         ValueError: If @FUNC expression is provided but `yaml_func_instance` is None.
         Exception: If an error occurs while calling the method.
     """
-    if not input_dict or yaml_func_instance is None:
+    if not input_dict:
+        return input_dict
+
+    if yaml_func_instance is None:
+        # @FUNC 表达式在无扩展实例时必须报错（docstring 承诺的 ValueError）。
+        # 检查直接字符串值和嵌套容器中的 @FUNC——两者都必须触发报错，
+        # 而不是静默返回未解析的原值。
+        for value in input_dict.values():
+            if _contains_func_expression(value):
+                raise ValueError(
+                    f"yaml_func_extension.py is required to resolve @FUNC expression {value}.")
         return input_dict
 
     processed_dict = {}
